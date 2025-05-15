@@ -98,7 +98,7 @@ mod Agent {
             let nonce = self.nonces.read(caller);
 
             // Build hash for calling `is_valid_signature`
-            let message = Message { amount, token, nonce };
+            let message = Message { caller, amount, token, nonce };
             let hash = message.get_message_hash(signer);
 
             let is_valid_signature_felt = ISRC6Dispatcher { contract_address: signer }
@@ -108,7 +108,6 @@ mod Agent {
             let is_valid_signature = is_valid_signature_felt == starknet::VALIDATED
                 || is_valid_signature_felt == 1;
             assert(is_valid_signature, 'Invalid signature');
-
 
             // Check if the token is accepted
             let accepted_tokens = self.accepted_tokens.read();
