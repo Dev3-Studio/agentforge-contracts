@@ -2,7 +2,6 @@ use core::hash::{HashStateExTrait, HashStateTrait};
 use core::poseidon::PoseidonTrait;
 use openzeppelin_utils::snip12::{OffchainMessageHash, SNIP12Metadata, StructHash};
 use starknet::ContractAddress;
-//use starknet::storage::Map;
 
 #[starknet::interface]
 pub trait IAgent<TContractState> {
@@ -180,10 +179,9 @@ pub mod Agent {
             self.nonces.write(caller, nonce + 1);
 
             // Emit event
-            self
-                .emit(
-                    ExecuteSuccess { caller: caller, token: token, amount: amount, nonce: nonce },
-                );
+            self.emit(
+                ExecuteSuccess { caller: caller, token: token, amount: amount, nonce: nonce },
+            );
         }
     }
 
