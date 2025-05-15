@@ -2,14 +2,15 @@ use core::hash::{HashStateExTrait, HashStateTrait};
 use core::poseidon::PoseidonTrait;
 use openzeppelin_utils::snip12::{OffchainMessageHash, SNIP12Metadata, StructHash};
 use starknet::ContractAddress;
-use starknet::storage::Map;
+//use starknet::storage::Map;
 
 #[starknet::interface]
 pub trait IAgent<TContractState> {
     fn factory(self: @TContractState) -> ContractAddress;
-    fn update_accepted_tokens(ref self: TContractState, accepted_tokens: Map<u256, ContractAddress>);
+    fn add_accepted_tokens(ref self: TContractState, tokens: Array<ContractAddress>);
+    fn remove_accepted_token(ref self: TContractState, token: ContractAddress);
     fn execute(
-        ref self: TContractState, token: ContractAddress, amount: felt252, signature: Array<felt252>,
+        ref self: TContractState, token: ContractAddress, amount: u256, signature: Array<felt252>,
     );
 }
 
@@ -43,10 +44,10 @@ pub mod Agent {
     use openzeppelin_access::ownable::OwnableComponent;
     use openzeppelin_account::interface::{ISRC6Dispatcher, ISRC6DispatcherTrait};
     use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
-    use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess, Map};
-    use starknet::{ContractAddress, get_caller_address};
+    use starknet::{ContractAddress, get_caller_address, get_contract_address};
     use super::{Message, OffchainMessageHash, SNIP12Metadata};
-    
+    use starknet::storage::{Map, StoragePointerWriteAccess, StoragePointerReadAccess, StorageMapReadAccess, StorageMapWriteAccess};
+
     // Component Declarations
     component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
 
@@ -63,7 +64,7 @@ pub mod Agent {
         #[substorage(v0)]
         ownable: OwnableComponent::Storage,
         name: felt252,
-        accepted_tokens: Map<u256, ContractAddress>,
+        accepted_tokens: Map<ContractAddress, bool>,
         nonces: Map<ContractAddress, u256>,
         _factory: ContractAddress,
         _signer: ContractAddress,
@@ -94,13 +95,13 @@ pub mod Agent {
         name: felt252,
         owner: ContractAddress,
         signer: ContractAddress,
-        accepted_tokens: Map<felt252, ContractAddress>,
+        accepted_tokens: Array<ContractAddress>,
     ) {
         self.ownable.initializer(owner);
         self.name.write(name);
         self._factory.write(get_caller_address());
         self._signer.write(signer);
-        self.accepted_tokens.write(accepted_tokens);
+        self.add_accepted_tokens(accepted_tokens);
     }
 
     // Required for hash computation
@@ -120,18 +121,28 @@ pub mod Agent {
             return self._factory.read();
         }
 
-        fn update_accepted_tokens(
-            ref self: ContractState, accepted_tokens: Map<u256, ContractAddress>,
+        fn add_accepted_tokens(
+            ref self: ContractState, tokens: Array<ContractAddress>,
         ) {
             self.ownable.assert_only_owner();
-            self.accepted_tokens.write(accepted_tokens);
+
+            for i in 0..tokens.len() {
+                self.accepted_tokens.write(*tokens.at(i), true);
+            }
+        }
+
+        fn remove_accepted_token(
+            ref self: ContractState, token: ContractAddress,
+        ) {
+            self.ownable.assert_only_owner();
+            self.accepted_tokens.write(token, false);
         }
 
         // ensure signature is from signer and deduct signed amount of tokens from the sender
         fn execute(
             ref self: ContractState,
             token: ContractAddress,
-            amount: felt252,
+            amount: u256,
             signature: Array<felt252>,
         ) {
             let signer = self._signer.read();
@@ -151,14 +162,14 @@ pub mod Agent {
             assert(is_valid_signature, 'Invalid signature');
 
             // Check if the token is accepted
-            let accepted_tokens = self.accepted_tokens.read();
-            if !accepted_tokens.contains_key(token) {
-                panic("Token not accepted");
+            let accepted_tokens = self.accepted_tokens.read(token);
+            if !accepted_tokens {
+                panic!("Token not accepted");
             }
 
             // Check if the amount is valid
-            if amount <= 0 {
-                panic("Invalid amount");
+            if amount < 0 {
+                panic!("Invalid amount");
             }
 
             // Transfer the tokens from the sender to the contract
