@@ -1,17 +1,48 @@
 use starknet::ContractAddress;
+use core::hash::{HashStateExTrait, HashStateTrait};
+use core::poseidon::PoseidonTrait;
+use openzeppelin_utils::snip12::StructHash;
+use openzeppelin_utils::snip12::SNIP12Metadata;
 
 #[starknet::interface]
 pub trait IAgent<TContractState> {
     fn factory(self: @TContractState) -> ContractAddress;
     fn update_accepted_tokens(
         self: @TContractState,
-        accepted_tokens: Map<felt252, ContractAddress>,
+        accepted_tokens: Map<u256, ContractAddress>,
     );
     fn execute(
         self: @TContractState,
-        signature: felt252,
+        token: ContractAddress,
+        amount: felt252,
+        signature: Array<felt252>,
     );
 }
+
+const MESSAGE_TYPE_HASH: felt252 =
+    0x28bf13f11bba405c77ce010d2781c5903cbed100f01f72fcff1664f98343eb6;
+
+// todo compute
+//let message_type_hash = selector!(
+//    "\"Message\"(\"caller\":\"ContractAddress\",\"amount\":\"u256\",\"token\":\"ContractAddress\",\"nonce\":\"u256\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")"
+//);
+
+#[derive(Copy, Drop, Hash)]
+struct Message {
+    caller: ContractAddress,
+    amount: u256,
+    token: ContractAddress,
+    nonce: u256,
+}
+
+impl StructHashImpl of StructHash<Message> {
+    fn hash_struct(self: @Message) -> felt252 {
+        let hash_state = PoseidonTrait::new();
+        hash_state.update_with(MESSAGE_TYPE_HASH).update_with(*self).finalize()
+    }
+}
+
+
 
 #[starknet::contract]
 mod Agent {
@@ -20,7 +51,8 @@ mod Agent {
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::{ContractAddress, get_caller_address};
     use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
-    use starknet::secp256_trait::{Signature};
+    use super::{Message, OffchainMessageHash, SNIP12Metadata};
+    use openzeppelin_account::interface::{ISRC6Dispatcher, ISRC6DispatcherTrait};
 
     // Component Declarations
     component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
@@ -37,8 +69,9 @@ mod Agent {
     struct Storage {
         #[substorage(v0)]
         ownable: OwnableComponent::Storage,
-        accepted_tokens: Map<felt252, ContractAddress>,
-        nonces: Map<ContractAddress, felt252>,
+        name: felt252,
+        accepted_tokens: Map<u256, ContractAddress>,
+        nonces: Map<ContractAddress, u256>,
         _factory: ContractAddress,
         _signer: ContractAddress,
     }
@@ -57,18 +90,26 @@ mod Agent {
         #[key]
         caller: ContractAddress,
         token: ContractAddress,
-        amount: felt252,
-        nonce: felt252,
+        amount: u256,
+        nonce: u256,
     }
 
     // Constructor
     #[constructor]
-    fn constructor(ref self: ContractState, owner: ContractAddress, signer: ContractAddress, accepted_tokens: Map<felt252, ContractAddress>) {
+    fn constructor(ref self: ContractState, name: felt252, owner: ContractAddress, signer: ContractAddress, accepted_tokens: Map<felt252, ContractAddress>) {
         self.ownable.initializer(owner);
-
+        self.name.write(name);
         self._factory.write(get_caller_address());
         self._signer.write(signer);
         self.accepted_tokens.write(accepted_tokens);
+    }
+
+    // Required for hash computation
+    impl SNIP12MetadataImpl of SNIP12Metadata {
+        fn name() -> felt252 {
+            'AgentForge_Agent'
+        }
+        fn version() -> felt252 { 'v1' }
     }
 
     // Public Functions
@@ -80,7 +121,7 @@ mod Agent {
 
         fn update_accepted_tokens(
             self: @ContractState,
-            accepted_tokens: Map<felt252, ContractAddress>,
+            accepted_tokens: Map<u256, ContractAddress>,
         ) {
             self.ownable.assert_only_owner();
             self.accepted_tokens.write(accepted_tokens);
@@ -89,9 +130,9 @@ mod Agent {
         // ensure signature is from signer and deduct signed amount of tokens from the sender
         fn execute(
             self: @ContractState,
-            amount: felt252,
             token: ContractAddress,
-            signature: Signature,
+            amount: felt252,
+            signature: Array<felt252>,
         ) {
             let signer = self._signer.read();
             let caller = get_caller_address();
@@ -124,6 +165,9 @@ mod Agent {
             let erc20dispatcher = IERC20Dispatcher {contract_address: token};
             erc20dispatcher.transfer_from(get_caller_address(), get_contract_address(), amount);
 
+            // Increment the nonce
+            self.nonces.write(caller, nonce + 1);
+
             // Emit event
             self.emit(ExecuteSuccess {
                 caller: caller,
@@ -131,9 +175,6 @@ mod Agent {
                 amount: amount,
                 nonce: nonce,
             });
-
-            // Increment the nonce
-            self.nonces.write(caller, nonce + 1);
         }
     }
 
