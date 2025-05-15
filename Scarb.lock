@@ -6,6 +6,9 @@ name = "agentforge"
 version = "0.1.0"
 dependencies = [
  "openzeppelin_access",
+ "openzeppelin_account",
+ "openzeppelin_token",
+ "openzeppelin_utils",
  "snforge_std",
 ]
 
@@ -20,10 +23,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "openzeppelin_account"
+version = "1.0.0"
+source = "registry+https://scarbs.xyz/"
+checksum = "sha256:7e943a2de32ddca4d48e467e52790e380ab1f49c4daddbbbc4634dd930d0243f"
+dependencies = [
+ "openzeppelin_introspection",
+ "openzeppelin_utils",
+]
+
+[[package]]
 name = "openzeppelin_introspection"
 version = "1.0.0"
 source = "registry+https://scarbs.xyz/"
 checksum = "sha256:34e088ecf19e0b3012481a29f1fbb20e600540cb9a5db1c3002a97ebb7f5a32a"
+
+[[package]]
+name = "openzeppelin_token"
+version = "1.0.0"
+source = "registry+https://scarbs.xyz/"
+checksum = "sha256:33fcb84a1a76d2d3fff9302094ff564f78d45b743548fd7568c130b272473f66"
+dependencies = [
+ "openzeppelin_access",
+ "openzeppelin_account",
+ "openzeppelin_introspection",
+ "openzeppelin_utils",
+]
 
 [[package]]
 name = "openzeppelin_utils"

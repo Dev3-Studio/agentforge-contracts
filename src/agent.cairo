@@ -1,21 +1,15 @@
-use starknet::ContractAddress;
 use core::hash::{HashStateExTrait, HashStateTrait};
 use core::poseidon::PoseidonTrait;
-use openzeppelin_utils::snip12::StructHash;
-use openzeppelin_utils::snip12::SNIP12Metadata;
+use openzeppelin_utils::snip12::{OffchainMessageHash, SNIP12Metadata, StructHash};
+use starknet::ContractAddress;
+use starknet::storage::Map;
 
 #[starknet::interface]
 pub trait IAgent<TContractState> {
     fn factory(self: @TContractState) -> ContractAddress;
-    fn update_accepted_tokens(
-        self: @TContractState,
-        accepted_tokens: Map<u256, ContractAddress>,
-    );
+    fn update_accepted_tokens(ref self: TContractState, accepted_tokens: Map<u256, ContractAddress>);
     fn execute(
-        self: @TContractState,
-        token: ContractAddress,
-        amount: felt252,
-        signature: Array<felt252>,
+        ref self: TContractState, token: ContractAddress, amount: felt252, signature: Array<felt252>,
     );
 }
 
@@ -43,17 +37,16 @@ impl StructHashImpl of StructHash<Message> {
 }
 
 
-
 #[starknet::contract]
-mod Agent {
+pub mod Agent {
     // Imports
     use openzeppelin_access::ownable::OwnableComponent;
-    use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
-    use starknet::{ContractAddress, get_caller_address};
-    use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
-    use super::{Message, OffchainMessageHash, SNIP12Metadata};
     use openzeppelin_account::interface::{ISRC6Dispatcher, ISRC6DispatcherTrait};
-
+    use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
+    use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess, Map};
+    use starknet::{ContractAddress, get_caller_address};
+    use super::{Message, OffchainMessageHash, SNIP12Metadata};
+    
     // Component Declarations
     component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
 
@@ -96,7 +89,13 @@ mod Agent {
 
     // Constructor
     #[constructor]
-    fn constructor(ref self: ContractState, name: felt252, owner: ContractAddress, signer: ContractAddress, accepted_tokens: Map<felt252, ContractAddress>) {
+    fn constructor(
+        ref self: ContractState,
+        name: felt252,
+        owner: ContractAddress,
+        signer: ContractAddress,
+        accepted_tokens: Map<felt252, ContractAddress>,
+    ) {
         self.ownable.initializer(owner);
         self.name.write(name);
         self._factory.write(get_caller_address());
@@ -109,7 +108,9 @@ mod Agent {
         fn name() -> felt252 {
             'AgentForge_Agent'
         }
-        fn version() -> felt252 { 'v1' }
+        fn version() -> felt252 {
+            'v1'
+        }
     }
 
     // Public Functions
@@ -120,8 +121,7 @@ mod Agent {
         }
 
         fn update_accepted_tokens(
-            self: @ContractState,
-            accepted_tokens: Map<u256, ContractAddress>,
+            ref self: ContractState, accepted_tokens: Map<u256, ContractAddress>,
         ) {
             self.ownable.assert_only_owner();
             self.accepted_tokens.write(accepted_tokens);
@@ -129,7 +129,7 @@ mod Agent {
 
         // ensure signature is from signer and deduct signed amount of tokens from the sender
         fn execute(
-            self: @ContractState,
+            ref self: ContractState,
             token: ContractAddress,
             amount: felt252,
             signature: Array<felt252>,
@@ -162,19 +162,17 @@ mod Agent {
             }
 
             // Transfer the tokens from the sender to the contract
-            let erc20dispatcher = IERC20Dispatcher {contract_address: token};
+            let erc20dispatcher = IERC20Dispatcher { contract_address: token };
             erc20dispatcher.transfer_from(get_caller_address(), get_contract_address(), amount);
 
             // Increment the nonce
             self.nonces.write(caller, nonce + 1);
 
             // Emit event
-            self.emit(ExecuteSuccess {
-                caller: caller,
-                token: token,
-                amount: amount,
-                nonce: nonce,
-            });
+            self
+                .emit(
+                    ExecuteSuccess { caller: caller, token: token, amount: amount, nonce: nonce },
+                );
         }
     }
 
