@@ -11,15 +11,13 @@ pub trait IAgent<TContractState> {
     fn execute(
         ref self: TContractState, token: ContractAddress, amount: u256, signature: Array<felt252>,
     );
+    // dev function can be removed in production
+    fn get_selector(self: @TContractState) -> felt252;
 }
 
 const MESSAGE_TYPE_HASH: felt252 =
-    0x28bf13f11bba405c77ce010d2781c5903cbed100f01f72fcff1664f98343eb6;
+    0x2d64267ce5f876d7564c5386ed9100d773d3de9ddab561eebfd170d009553b4;
 
-// todo compute
-//let message_type_hash = selector!(
-//    "\"Message\"(\"caller\":\"ContractAddress\",\"amount\":\"u256\",\"token\":\"ContractAddress\",\"nonce\":\"u256\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")"
-//);
 
 #[derive(Copy, Drop, Hash)]
 struct Message {
@@ -113,6 +111,8 @@ pub mod Agent {
         }
     }
 
+
+
     // Public Functions
     #[abi(embed_v0)]
     impl AgentImpl of super::IAgent<ContractState> {
@@ -135,6 +135,11 @@ pub mod Agent {
         ) {
             self.ownable.assert_only_owner();
             self.accepted_tokens.write(token, false);
+        }
+
+        fn get_selector(self: @ContractState) -> felt252 {
+            let selector = selector!("\"Message\"(\"caller\":\"ContractAddress\",\"amount\":\"u256\",\"token\":\"ContractAddress\",\"nonce\":\"u256\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")");
+            return selector;
         }
 
         // ensure signature is from signer and deduct signed amount of tokens from the sender
