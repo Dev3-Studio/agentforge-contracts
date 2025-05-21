@@ -41,9 +41,10 @@ pub mod Agent {
     use openzeppelin_access::ownable::OwnableComponent;
     use openzeppelin_account::interface::{ISRC6Dispatcher, ISRC6DispatcherTrait};
     use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
-    use starknet::{ContractAddress, get_caller_address, get_contract_address};
+    use starknet::{get_caller_address, get_contract_address, ContractAddress};
     use super::{Message, OffchainMessageHash, SNIP12Metadata};
     use starknet::storage::{Map, StoragePointerWriteAccess, StoragePointerReadAccess, StorageMapReadAccess, StorageMapWriteAccess};
+    use agentforge::factory::{IFactoryDispatcher, IFactoryDispatcherTrait};
 
     // Component Declarations
     component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
@@ -60,11 +61,10 @@ pub mod Agent {
     struct Storage {
         #[substorage(v0)]
         ownable: OwnableComponent::Storage,
-        name: felt252,
+        name: ByteArray,
         accepted_tokens: Map<ContractAddress, bool>,
         nonces: Map<ContractAddress, u256>,
-        _factory: ContractAddress,
-        _signer: ContractAddress,
+        factory: ContractAddress,
     }
 
     // Events
@@ -89,15 +89,13 @@ pub mod Agent {
     #[constructor]
     fn constructor(
         ref self: ContractState,
-        name: felt252,
+        name: ByteArray,
         owner: ContractAddress,
-        signer: ContractAddress,
         accepted_tokens: Array<ContractAddress>,
     ) {
         self.ownable.initializer(owner);
         self.name.write(name);
-        self._factory.write(get_caller_address());
-        self._signer.write(signer);
+        self.factory.write(get_caller_address());
         self.add_accepted_tokens(accepted_tokens);
     }
 
@@ -117,7 +115,7 @@ pub mod Agent {
     #[abi(embed_v0)]
     impl AgentImpl of super::IAgent<ContractState> {
         fn factory(self: @ContractState) -> ContractAddress {
-            return self._factory.read();
+            return self.factory.read();
         }
 
         fn add_accepted_tokens(
@@ -149,7 +147,9 @@ pub mod Agent {
             amount: u256,
             signature: Array<felt252>,
         ) {
-            let signer = self._signer.read();
+
+            let factory = IFactoryDispatcher { contract_address: self.factory.read() };
+            let signer = factory.get_signer();
             let caller = get_caller_address();
             let nonce = self.nonces.read(caller);
 
