@@ -63,11 +63,12 @@ pub mod Factory {
     #[constructor]
     fn constructor(
         ref self: ContractState,
+        owner: ContractAddress,
         signer: ContractAddress,
         universal_deployer_address: ContractAddress,
         agent_class_hash: ClassHash,
     ) {
-        self.ownable.initializer(get_caller_address());
+        self.ownable.initializer(owner);
         self.signer.write(signer);
         self.universal_deployer_address.write(universal_deployer_address);
         self.agent_class_hash.write(agent_class_hash);
