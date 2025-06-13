@@ -11,7 +11,7 @@ pub trait IFactory<TContractState> {
 pub mod Factory {
     use openzeppelin_access::ownable::OwnableComponent;
     use openzeppelin_utils::serde::SerializedAppend;
-    use starknet::{ClassHash, get_caller_address, get_contract_address, ContractAddress};
+    use starknet::{ClassHash, get_contract_address, ContractAddress};
     use openzeppelin_utils::interfaces::{
         IUniversalDeployerDispatcher, IUniversalDeployerDispatcherTrait,
     };
